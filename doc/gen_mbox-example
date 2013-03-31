@@ -1,0 +1,96 @@
+#!/usr/bin/env perl
+use strict;
+
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../t/lib";
+
+use Mail::Box::Mbox;
+use Mail::Box::Maildir;
+use Mail::Message;
+use Mail::Address;
+use DateTime::Format::Mail;
+
+use HTML::FormatText;
+
+use WWW::Slashdot::Scraper::TestHelper;
+use WWW::Slashdot::Scraper::Story;
+
+my $url = "http://tech.slashdot.org/story/12/06/12/167227/inventor-of-email-gets-support-of-noam-chomsky";
+my $user_login = generate_login() or die "could not login";
+
+print "opening mailbox\n";
+my $FOLDER = 'mail';
+mkdir $FOLDER;
+my $box = Mail::Box::Mbox->new( folderdir => $FOLDER , create => 1, folder => 'Inbox' , access => 'rw');
+#my $box = Mail::Box::Maildir->new( folderdir => $FOLDER);
+print "opened mailbox\n";
+
+my $user_story = WWW::Slashdot::Scraper::Story->new( story_url => $url,
+	login => $user_login );
+print "calling update\n";
+my $ret; do { $ret = $user_story->comment_container->update; } while($ret != 0);
+print "called update\n";
+
+my $tree = $user_story->comment_container->comment_tree;
+print "Tree traversal:\n";
+
+$tree->visit( sub {
+	my $t = shift;
+	my $n = $t->node;
+	print $n->title, "\n";
+	my ($body_HTML, @headers, $dt);
+	if($n->isa('WWW::Slashdot::Scraper::Story')) {
+		$body_HTML = $n->article_HTML;
+		# TODO
+		push @headers, ( From => 'TODO' );
+		push @headers, ( Subject => $n->title );
+		push @headers, ( 'X-Archived-At' => $n->canonical_uri );
+		$dt = $n->datetime;
+	} else {
+		# comment
+		$body_HTML = $n->body;
+		push @headers, ( From => Mail::Address->new($n->author->name, "@{[$n->author->uid]}\@slashdot.org") );
+		push @headers, ( Subject => $n->title );
+		push @headers, ( Date => $n->title );
+		push @headers, ( 'X-Archived-At' => $n->uri );
+		$dt = $n->datetime;
+	}
+	push @headers, ( 'Message-ID' => msgid($n) );
+	push @headers, ( 'In-Reply-To' => msgid($t->parent->node) ) if $t->parent;
+	push @headers, ( 'References' => references($t) );
+	my $body = HTML::FormatText->format_string( $body_HTML // "", leftmargin => 0,
+		rightmargin => 75);
+	#my $body = $body_HTML;
+
+	my $msg = Mail::Message->build( @headers, data => $body );
+	$msg->head->add( Date => DateTime::Format::Mail->format_datetime( $dt ) );
+
+	$box->addMessage($msg);
+});
+
+$box->write;
+$box->close;
+
+#use DDP; p dump_commenttree($user_story->comment_container->comment_tree);
+
+sub msgid {
+	my $n = shift;
+	if($n->isa('WWW::Slashdot::Scraper::Story')) {
+		return '<'.$n->discussion_id.'@slashdot.org>';
+	} else {
+		# comment
+		return '<'.$n->story->discussion_id.'-'.$n->cid.'@slashdot.org>';
+	}
+}
+
+sub references {
+	my $tree = shift;
+	my @ref;
+	my $cur = $tree->parent;
+	while($cur) {
+		unshift @ref, msgid($cur->node);
+		$cur = $cur->parent;
+	}
+	return join ' ', @ref;
+}
