@@ -1,0 +1,9 @@
+Moose
+MooseX::Method::Signatures
+WWW::Mechanize
+HTML::Tree
+Forest::Tree
+Date::Parse
+DateTime
+MooseX::Types::DateTime
+MooseX::Types::URI

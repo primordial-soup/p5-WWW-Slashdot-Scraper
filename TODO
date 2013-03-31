@@ -1,0 +1,16 @@
+vim: ft=vo_base
+
+comment message
+	: <div class="commentwrap ">
+	: <div class="commentBox notice pcna">
+	: 			
+	: 
+	: 		
+	: 			
+	: 				This discussion has been archived.
+	: 			
+	: 			No new comments can be posted.
+	: 		
+	: 	
+	: </div>
+	: </div><a name="comments"></a>
